@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function AdminLoginPage() {
@@ -100,6 +101,11 @@ export default function AdminLoginPage() {
             <Button type="submit" className="w-full" loading={isLoading}>
               Sign In
             </Button>
+            <div className="text-center">
+              <Link href="/admin/reset-password" className="text-sm text-gray-500 hover:text-gray-700">
+                Forgot password?
+                </Link>
+              </div>
           </form>
         </CardContent>
       </Card>
