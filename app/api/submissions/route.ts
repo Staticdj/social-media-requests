@@ -2,21 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { nanoid } from 'nanoid';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const ALLOWED_FILE_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/quicktime',
-];
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-
 export async function POST(request: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
@@ -33,8 +30,16 @@ export async function POST(request: NextRequest) {
     const frequencyCustom = formData.get('frequency_custom') as string;
     const cta = formData.get('cta') as string;
     const ctaCustom = formData.get('cta_custom') as string;
-    const fieldsJson = JSON.parse((formData.get('fields_json') as string) || '{}');
+    const fieldsJsonRaw = formData.get('fields_json') as string;
     const notes = formData.get('notes') as string;
+
+    // Parse fields JSON safely
+    let fieldsJson = {};
+    try {
+      fieldsJson = JSON.parse(fieldsJsonRaw || '{}');
+    } catch (e) {
+      fieldsJson = {};
+    }
 
     // Validate required fields
     if (!venueId || !postType || !runStartDate) {
@@ -65,9 +70,9 @@ export async function POST(request: NextRequest) {
         run_start_date: runStartDate,
         run_end_date: runEndDate || null,
         until_sold_out: untilSoldOut,
-        post_frequency: postFrequency,
+        post_frequency: postFrequency || 'once',
         frequency_custom: frequencyCustom || null,
-        cta: cta,
+        cta: cta || 'walk_ins',
         cta_custom: ctaCustom || null,
         fields_json: fieldsJson,
         notes: notes || null,
@@ -78,7 +83,7 @@ export async function POST(request: NextRequest) {
     if (submissionError) {
       console.error('Submission error:', submissionError);
       return NextResponse.json(
-        { error: 'Failed to create submission' },
+        { error: 'Failed to create submission: ' + submissionError.message },
         { status: 500 }
       );
     }
@@ -99,34 +104,45 @@ export async function POST(request: NextRequest) {
       if (value instanceof File && value.size > 0) {
         const file = value;
 
-        if (!ALLOWED_FILE_TYPES.includes(file.type)) continue;
-        if (file.size > MAX_FILE_SIZE) continue;
+        // Skip invalid files
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
+        if (!allowedTypes.includes(file.type)) continue;
+        if (file.size > 50 * 1024 * 1024) continue; // 50MB max
 
-        const ext = file.name.split('.').pop();
-        const filename = `${submission.id}/${nanoid()}.${ext}`;
+        try {
+          const ext = file.name.split('.').pop() || 'bin';
+          const filename = `${submission.id}/${nanoid()}.${ext}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('attachments')
-          .upload(filename, file, {
-            contentType: file.type,
-            cacheControl: '3600',
+          // Convert File to ArrayBuffer for upload
+          const arrayBuffer = await file.arrayBuffer();
+          const buffer = new Uint8Array(arrayBuffer);
+
+          const { error: uploadError } = await supabase.storage
+            .from('attachments')
+            .upload(filename, buffer, {
+              contentType: file.type,
+              cacheControl: '3600',
+            });
+
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            continue;
+          }
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('attachments')
+            .getPublicUrl(filename);
+
+          uploadedFiles.push({
+            url: publicUrl,
+            type: file.type,
+            size: file.size,
+            name: file.name,
           });
-
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
+        } catch (uploadErr) {
+          console.error('File processing error:', uploadErr);
           continue;
         }
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from('attachments').getPublicUrl(filename);
-
-        uploadedFiles.push({
-          url: publicUrl,
-          type: file.type,
-          size: file.size,
-          name: file.name,
-        });
       }
     }
 
@@ -143,10 +159,11 @@ export async function POST(request: NextRequest) {
       await supabase.from('attachments').insert(attachmentRecords);
     }
 
-    // Send email notification (optional - won't fail if it errors)
+    // Send email notification
     try {
       const resendKey = process.env.RESEND_API_KEY;
       const adminEmail = process.env.ADMIN_EMAIL;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
       if (resendKey && adminEmail) {
         await fetch('https://api.resend.com/emails', {
@@ -158,8 +175,14 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             from: 'Social Media Requests <onboarding@resend.dev>',
             to: adminEmail,
-            subject: `[${venue.name}] New ${postType.replace('_', ' ')} Request`,
-            html: `<p>New submission from <strong>${venue.name}</strong></p><p><a href="${process.env.NEXT_PUBLIC_APP_URL}/admin/submissions/${submission.id}">View Submission</a></p>`,
+            subject: `[${venue.name}] New ${postType.replace(/_/g, ' ')} Request`,
+            html: `
+              <h2>New submission from ${venue.name}</h2>
+              <p><strong>Type:</strong> ${postType.replace(/_/g, ' ')}</p>
+              <p><strong>Start Date:</strong> ${runStartDate}</p>
+              <p><strong>Attachments:</strong> ${uploadedFiles.length} file(s)</p>
+              <p><a href="${appUrl}/admin/submissions/${submission.id}">View Submission</a></p>
+            `,
           }),
         });
       }
