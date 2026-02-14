@@ -3,14 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { getStatusColor, getStatusLabel } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 interface StatusSelectorProps {
@@ -18,13 +10,20 @@ interface StatusSelectorProps {
   currentStatus: string;
 }
 
-const STATUSES = ['new', 'needs_info', 'ready', 'archived'];
+const STATUSES = [
+  { value: 'new', label: 'New', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { value: 'scheduled', label: 'Scheduled', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800 border-green-200' },
+  { value: 'denied', label: 'Denied', color: 'bg-red-100 text-red-800 border-red-200' },
+];
 
 export function StatusSelector({ submissionId, currentStatus }: StatusSelectorProps) {
   const router = useRouter();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleStatusChange = async (newStatus: string) => {
+    if (newStatus === currentStatus) return;
+    
     setIsUpdating(true);
 
     try {
@@ -45,38 +44,26 @@ export function StatusSelector({ submissionId, currentStatus }: StatusSelectorPr
   };
 
   return (
-    <Select
-      value={currentStatus}
-      onValueChange={handleStatusChange}
-      disabled={isUpdating}
-    >
-      <SelectTrigger
-        className={cn(
-          'w-[140px]',
-          getStatusColor(currentStatus),
-          'border-none font-medium'
-        )}
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
+    <div className="space-y-3">
+      <p className="text-sm font-medium text-gray-700">Status</p>
+      <div className="flex flex-wrap gap-2">
         {STATUSES.map((status) => (
-          <SelectItem key={status} value={status}>
-            <span className="flex items-center gap-2">
-              <span
-                className={cn(
-                  'w-2 h-2 rounded-full',
-                  status === 'new' && 'bg-blue-500',
-                  status === 'needs_info' && 'bg-amber-500',
-                  status === 'ready' && 'bg-green-500',
-                  status === 'archived' && 'bg-gray-400'
-                )}
-              />
-              {getStatusLabel(status)}
-            </span>
-          </SelectItem>
+          <button
+            key={status.value}
+            onClick={() => handleStatusChange(status.value)}
+            disabled={isUpdating}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-sm font-medium border transition-all',
+              currentStatus === status.value
+                ? status.color + ' ring-2 ring-offset-2 ring-gray-400'
+                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100',
+              isUpdating && 'opacity-50 cursor-not-allowed'
+            )}
+          >
+            {status.label}
+          </button>
         ))}
-      </SelectContent>
-    </Select>
+      </div>
+    </div>
   );
 }

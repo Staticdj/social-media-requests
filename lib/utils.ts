@@ -59,6 +59,9 @@ export function getStatusLabel(status: string): string {
     new: 'New',
     needs_info: 'Needs Info',
     ready: 'Ready',
+    scheduled: 'Scheduled',
+    completed: 'Completed',
+    denied: 'Denied',
     archived: 'Archived',
   };
   return labels[status] || status;
@@ -69,6 +72,9 @@ export function getStatusColor(status: string): string {
     new: 'bg-blue-100 text-blue-800',
     needs_info: 'bg-amber-100 text-amber-800',
     ready: 'bg-green-100 text-green-800',
+    scheduled: 'bg-purple-100 text-purple-800',
+    completed: 'bg-green-100 text-green-800',
+    denied: 'bg-red-100 text-red-800',
     archived: 'bg-gray-100 text-gray-800',
   };
   return colors[status] || 'bg-gray-100 text-gray-800';

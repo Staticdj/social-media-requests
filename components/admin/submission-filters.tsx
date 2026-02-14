@@ -21,8 +21,9 @@ interface SubmissionFiltersProps {
 const STATUSES = [
   { value: 'all', label: 'All statuses' },
   { value: 'new', label: 'New' },
-  { value: 'needs_info', label: 'Needs Info' },
-  { value: 'ready', label: 'Ready' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'denied', label: 'Denied' },
   { value: 'archived', label: 'Archived' },
 ];
 
