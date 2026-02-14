@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { nanoid } from 'nanoid';
 
+export const runtime = 'nodejs';
+export const maxDuration = 60; // Allow up to 60 seconds for video uploads
+
 export async function POST(request: NextRequest) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -33,7 +36,6 @@ export async function POST(request: NextRequest) {
     const fieldsJsonRaw = formData.get('fields_json') as string;
     const notes = formData.get('notes') as string;
 
-    // Parse fields JSON safely
     let fieldsJson = {};
     try {
       fieldsJson = JSON.parse(fieldsJsonRaw || '{}');
@@ -41,7 +43,6 @@ export async function POST(request: NextRequest) {
       fieldsJson = {};
     }
 
-    // Validate required fields
     if (!venueId || !postType || !runStartDate) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -49,7 +50,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate venue exists
     const { data: venue, error: venueError } = await supabase
       .from('venues')
       .select('*')
@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid venue' }, { status: 400 });
     }
 
-    // Create submission
     const { data: submission, error: submissionError } = await supabase
       .from('submissions')
       .insert({
@@ -96,6 +95,15 @@ export async function POST(request: NextRequest) {
       name: string;
     }> = [];
 
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png', 
+      'image/webp',
+      'video/mp4',
+      'video/quicktime',
+      'video/mov',
+    ];
+
     const fileEntries = Array.from(formData.entries()).filter(([key]) =>
       key.startsWith('file_')
     );
@@ -104,24 +112,30 @@ export async function POST(request: NextRequest) {
       if (value instanceof File && value.size > 0) {
         const file = value;
 
-        // Skip invalid files
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
-        if (!allowedTypes.includes(file.type)) continue;
-        if (file.size > 50 * 1024 * 1024) continue; // 50MB max
+        // Check file type
+        if (!allowedTypes.includes(file.type)) {
+          console.log(`Skipping file with type: ${file.type}`);
+          continue;
+        }
+
+        // 100MB max for videos, 50MB for images
+        const maxSize = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 50 * 1024 * 1024;
+        if (file.size > maxSize) {
+          console.log(`Skipping file, too large: ${file.size}`);
+          continue;
+        }
 
         try {
           const ext = file.name.split('.').pop() || 'bin';
           const filename = `${submission.id}/${nanoid()}.${ext}`;
 
-          // Convert File to ArrayBuffer for upload
-          const arrayBuffer = await file.arrayBuffer();
-          const buffer = new Uint8Array(arrayBuffer);
-
+          // Stream the file directly
           const { error: uploadError } = await supabase.storage
             .from('attachments')
-            .upload(filename, buffer, {
+            .upload(filename, file, {
               contentType: file.type,
               cacheControl: '3600',
+              duplex: 'half',
             });
 
           if (uploadError) {
@@ -148,15 +162,15 @@ export async function POST(request: NextRequest) {
 
     // Insert attachment records
     if (uploadedFiles.length > 0) {
-      const attachmentRecords = uploadedFiles.map((file) => ({
-        submission_id: submission.id,
-        file_url: file.url,
-        file_type: file.type,
-        file_size: file.size,
-        original_name: file.name,
-      }));
-
-      await supabase.from('attachments').insert(attachmentRecords);
+      await supabase.from('attachments').insert(
+        uploadedFiles.map((file) => ({
+          submission_id: submission.id,
+          file_url: file.url,
+          file_type: file.type,
+          file_size: file.size,
+          original_name: file.name,
+        }))
+      );
     }
 
     // Send email notification
