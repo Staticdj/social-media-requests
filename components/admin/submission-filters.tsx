@@ -80,14 +80,14 @@ export function SubmissionFilters({
       </Select>
 
       <Select
-        value={currentVenue || ''}
+        value={currentVenue || 'all'}
         onValueChange={(value) => updateFilter('venue', value)}
       >
         <SelectTrigger className="w-[180px] bg-white">
           <SelectValue placeholder="All venues" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All venues</SelectItem>
+          <SelectItem value="all">All venues</SelectItem>
           {venues.map((venue) => (
             <SelectItem key={venue.id} value={venue.id}>
               {venue.name}
