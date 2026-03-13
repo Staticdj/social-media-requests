@@ -6,7 +6,7 @@ export type PostType =
   | 'promotion'
   | 'other';
 
-export type SubmissionStatus = 'new' | 'needs_info' | 'ready' | 'archived';
+export type SubmissionStatus = 'new' | 'needs_info' | 'ready' | 'scheduled' | 'completed' | 'denied' | 'archived';
 
 export type PostFrequency = 'once' | 'twice' | 'daily' | 'custom';
 
