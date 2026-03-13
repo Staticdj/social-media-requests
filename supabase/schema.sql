@@ -67,13 +67,14 @@ CREATE INDEX IF NOT EXISTS idx_attachments_submission_id ON public.attachments(s
 -- =============================================
 
 -- Function to update the updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = '';
 
 -- Create triggers for updated_at
 DROP TRIGGER IF EXISTS update_venues_updated_at ON public.venues;
@@ -89,7 +90,7 @@ CREATE TRIGGER update_submissions_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to get submission counts by status
-CREATE OR REPLACE FUNCTION get_submission_counts_by_status()
+CREATE OR REPLACE FUNCTION public.get_submission_counts_by_status()
 RETURNS TABLE (status VARCHAR, count BIGINT) AS $$
 BEGIN
   RETURN QUERY
@@ -97,7 +98,8 @@ BEGIN
   FROM public.submissions s
   GROUP BY s.status;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = '';
 
 -- =============================================
 -- ROW LEVEL SECURITY
@@ -114,8 +116,8 @@ CREATE POLICY "Admin full access to venues"
   ON public.venues
   FOR ALL
   TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
 
 -- Anonymous users can read venues (for form submission validation)
 CREATE POLICY "Anon can read venues"
@@ -130,8 +132,8 @@ CREATE POLICY "Admin full access to submissions"
   ON public.submissions
   FOR ALL
   TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
 
 -- Anonymous users can insert submissions
 CREATE POLICY "Anon can insert submissions"
@@ -146,8 +148,8 @@ CREATE POLICY "Admin full access to attachments"
   ON public.attachments
   FOR ALL
   TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
 
 -- Anonymous users can insert attachments
 CREATE POLICY "Anon can insert attachments"
